@@ -9,19 +9,21 @@ import paymentRouter from "./routes/paymentRoute.js";
 import blogRouter from "./routes/blogRoutes.js";
 import cartRouter from "./routes/cartRoutes.js";
 import couponRouter from "./routes/couponsRoute.js";
+import formRouter from "./routes/formRoutes.js";
 
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 9000;
 const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:5174",
   "http://localhost:4173",
   "http://localhost:4174",
+  "https://tradeohedge.com",
   process.env.CLIENT_URL,
   process.env.ADMIN_URL,
   ...(process.env.NODE_ENV === "production"
-    ? [process.env.CLIENT_URL_PROD, process.env.ADMIN_URL_PROD,"https://www.banarasdigitalsolution.com/"]
+    ? [process.env.CLIENT_URL_PROD, process.env.ADMIN_URL_PROD,"https://tradeohedge.com"]
     : []),
 ].filter(Boolean);
 
@@ -61,7 +63,7 @@ app.get("/", (req, res) => {
 // Routes
 app.use("/api/user", userRouter);
 // app.use("/api/courses", courseRouter);
-// app.use("/api/forms", formRouter);
+app.use("/api/forms", formRouter);
 app.use("/api/payment", paymentRouter);
 // app.use("/api/courseStudent", courseStudentRouter);
 app.use("/api/blogs", blogRouter);
