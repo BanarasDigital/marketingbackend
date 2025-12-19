@@ -9,10 +9,18 @@ const paymentSchema = new mongoose.Schema(
     totalAmount: { type: Number, required: true },
     couponCode: { type: String, default: null },
     discount: { type: Number, default: 0 },
-    paymentStatus: { type: String, enum: ['success', 'failed'], default: 'success' },
+    paymentStatus: {
+      type: String,
+      enum: ["success", "failed", "SUCCESS", "FAILED"],
+      default: "success",
+    },
     paymentId: { type: String, required: true },
     plan: { type: String, required: true },
     gstAmount: { type: Number, required: true },
+    customerId: { type: String, default: "" }, // NKD0001
+    kycId: { type: mongoose.Schema.Types.ObjectId, ref: "Kyc" },
+    termsAccepted: { type: Boolean, required: true },
+    termsAcceptedAt: { type: Date },
   },
   { timestamps: true }
 );

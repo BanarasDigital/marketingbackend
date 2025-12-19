@@ -1,11 +1,10 @@
-import express from 'express';
-import {savePayment,getAllPayments} from "../controllers/paymentController.js";
+import express from "express";
+import { savePayment, getAllPayments, paymentSuccessAndStartKyc } from "../controllers/paymentController.js";
+
 const paymentRouter = express.Router();
 
-// Route for saving payment
-paymentRouter.post('/save', savePayment);
-
-// Route for fetching all payments
-paymentRouter.get('/all', getAllPayments);
+paymentRouter.post("/save", savePayment);
+paymentRouter.post("/success/start-kyc", paymentSuccessAndStartKyc); 
+paymentRouter.get("/all", getAllPayments);
 
 export default paymentRouter;

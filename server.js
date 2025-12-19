@@ -10,6 +10,7 @@ import blogRouter from "./routes/blogRoutes.js";
 import cartRouter from "./routes/cartRoutes.js";
 import couponRouter from "./routes/couponsRoute.js";
 import formRouter from "./routes/formRoutes.js";
+import kycRouter from "./routes/kycRoute.js";
 
 
 const app = express();
@@ -73,7 +74,7 @@ app.use("/api/coupons", couponRouter);
 // app.use("/api/tests", testRouter);
 // app.use("/api/otp", otpRouter);
 // app.use("/api/final", finalRouter);
-
+app.use("/api/kyc", kycRouter);
 // Error handler
 app.use((err, req, res, next) => {
   const statusCode = err.statusCode || 500;
