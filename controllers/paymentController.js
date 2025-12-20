@@ -57,11 +57,7 @@ export const savePayment = async (req, res) => {
 // controllers/paymentController.js
 
 export const paymentSuccessAndStartKyc = async (req, res) => {
-  const {
-    paymentId,   // UUID from frontend
-    razorpay,
-    termsAccepted,
-  } = req.body;
+  const { paymentId, razorpay, termsAccepted } = req.body;
 
   try {
     if (!termsAccepted) {
@@ -71,7 +67,6 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    // 1️⃣ Find EXISTING payment (created in /save)
     const payment = await Payment.findOne({ paymentId });
 
     if (!payment) {
@@ -81,19 +76,16 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    // 2️⃣ Mark payment as SUCCESS
     payment.paymentStatus = "success";
     payment.razorpay = razorpay;
     payment.paidAt = new Date();
 
-    // 3️⃣ Generate customerId ONCE
     if (!payment.customerId) {
       payment.customerId = await generateCustomerId();
     }
 
     await payment.save();
 
-    // 4️⃣ Prevent duplicate KYC
     let kyc = await Kyc.findOne({ paymentId: payment._id });
 
     if (!kyc) {
@@ -105,19 +97,25 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    // 5️⃣ Create Digio KYC
+    // ✅ PRODUCTION redirect URL
+    const clientBaseUrl = process.env.CLIENT_URL_PROD;
+    if (!clientBaseUrl) {
+      throw new Error("CLIENT_URL_PROD not configured");
+    }
+
+    const redirectUrl = `${clientBaseUrl.replace(/\/$/, "")}/kyc/digio/callback?paymentId=${payment.paymentId}`;
+
     const digioResp = await createKycRequest({
       customerId: payment.customerId,
       name: payment.name,
       email: payment.email,
       phone: payment.phone,
-      redirect_url: process.env.CLIENT_URL,
+      redirect_url: redirectUrl,
     });
 
-    // 6️⃣ Normalize KYC URL (VERY IMPORTANT)
     const gatewayBase =
       process.env.DIGIO_GATEWAY_BASE ||
-      "https://ext.digio.in/#/gateway/login/";
+      "https://app.digio.in/#/gateway/login/";
 
     const kycUrl =
       digioResp?.redirect_url ||
@@ -131,14 +129,12 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    // 7️⃣ Save Digio data
     kyc.digioKycRequestId = digioResp.id || digioResp.request_id;
     kyc.kycUrl = kycUrl;
     kyc.kycStatus = "IN_PROGRESS";
     kyc.kycRaw = digioResp;
     await kyc.save();
 
-    // 8️⃣ FINAL RESPONSE
     return res.status(200).json({
       success: true,
       customerId: payment.customerId,
@@ -153,7 +149,6 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       digio: err?.digio,
     });
 
-    // Digio auth error
     if (err?.code === "DIGIO_KYC_FAILED" && err?.status === 401) {
       return res.status(502).json({
         success: false,
@@ -166,8 +161,8 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       message: "Failed to start KYC flow",
     });
   }
-
 };
+
 
 
 
