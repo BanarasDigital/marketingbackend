@@ -82,13 +82,13 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
     }
 
     // 2️⃣ Mark payment as SUCCESS
-    payment.paymentStatus = "success";   
+    payment.paymentStatus = "success";
     payment.razorpay = razorpay;
-    payment.paidAt = new Date();        
+    payment.paidAt = new Date();
 
     // 3️⃣ Generate customerId ONCE
     if (!payment.customerId) {
-      payment.customerId = await generateCustomerId(); 
+      payment.customerId = await generateCustomerId();
     }
 
     await payment.save();
@@ -147,12 +147,26 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
     });
 
   } catch (err) {
-    console.error("start-kyc error:", err);
+    console.error("start-kyc error:", {
+      code: err?.code,
+      status: err?.status,
+      digio: err?.digio,
+    });
+
+    // Digio auth error
+    if (err?.code === "DIGIO_KYC_FAILED" && err?.status === 401) {
+      return res.status(502).json({
+        success: false,
+        message: "KYC service authentication failed. Please contact support.",
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "Failed to start KYC flow",
     });
   }
+
 };
 
 
