@@ -60,6 +60,7 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
   const { paymentId, razorpay, termsAccepted } = req.body;
 
   try {
+    /* 1️⃣ Terms validation */
     if (!termsAccepted) {
       return res.status(400).json({
         success: false,
@@ -67,8 +68,8 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
+    /* 2️⃣ Fetch payment */
     const payment = await Payment.findOne({ paymentId });
-
     if (!payment) {
       return res.status(404).json({
         success: false,
@@ -76,18 +77,33 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    payment.paymentStatus = "success";
-    payment.razorpay = razorpay;
-    payment.paidAt = new Date();
+    /* 3️⃣ Mark payment success (idempotent) */
+    if (payment.paymentStatus !== "success") {
+      payment.paymentStatus = "success";
+      payment.razorpay = razorpay;
+      payment.paidAt = new Date();
 
-    if (!payment.customerId) {
-      payment.customerId = await generateCustomerId();
+      if (!payment.customerId) {
+        payment.customerId = await generateCustomerId();
+      }
+
+      await payment.save();
     }
 
-    await payment.save();
-
+    /* 4️⃣ Check existing KYC */
     let kyc = await Kyc.findOne({ paymentId: payment._id });
 
+    /* 🔒 HARD BLOCK: if KYC already started, return same URL */
+    if (kyc && kyc.kycStatus === "IN_PROGRESS" && kyc.kycUrl) {
+      return res.status(200).json({
+        success: true,
+        customerId: payment.customerId,
+        kycId: kyc._id,
+        kycUrl: kyc.kycUrl,
+      });
+    }
+
+    /* 5️⃣ Create KYC record if missing */
     if (!kyc) {
       kyc = await Kyc.create({
         customerId: payment.customerId,
@@ -97,7 +113,7 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
       });
     }
 
-    // ✅ PRODUCTION redirect URL
+    /* 6️⃣ Redirect URL */
     const clientBaseUrl = process.env.CLIENT_URL_PROD;
     if (!clientBaseUrl) {
       throw new Error("CLIENT_URL_PROD not configured");
@@ -105,41 +121,46 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
 
     const redirectUrl = `${clientBaseUrl.replace(/\/$/, "")}/kyc/digio/callback?paymentId=${payment.paymentId}`;
 
-    const digioResp = await createKycRequest({
-      customerId: payment.customerId,
-      name: payment.name,
-      email: payment.email,
-      phone: payment.phone,
-      redirect_url: redirectUrl,
-    });
-
-    const gatewayBase =
-      process.env.DIGIO_GATEWAY_BASE ||
-      "https://app.digio.in/#/gateway/login/";
-
-    const kycUrl =
-      digioResp?.redirect_url ||
-      digioResp?.kyc_url ||
-      (digioResp?.id ? `${gatewayBase}${digioResp.id}` : "");
-
-    if (!kycUrl) {
-      return res.status(500).json({
-        success: false,
-        message: "Digio KYC URL not generated",
+    /* 7️⃣ Call Digio ONLY ONCE */
+    if (kyc.kycStatus === "CREATED") {
+      const digioResp = await createKycRequest({
+        customerId: payment.customerId,
+        name: payment.name,
+        email: payment.email,
+        phone: payment.phone,
+        redirect_url: redirectUrl,
       });
+
+      const gatewayBase =
+        process.env.DIGIO_GATEWAY_BASE ||
+        "https://app.digio.in/#/gateway/login/";
+
+      const kycUrl =
+        digioResp?.redirect_url ||
+        digioResp?.kyc_url ||
+        (digioResp?.id ? `${gatewayBase}${digioResp.id}` : "");
+
+      if (!kycUrl) {
+        return res.status(500).json({
+          success: false,
+          message: "Digio KYC URL not generated",
+        });
+      }
+
+      kyc.digioKycRequestId = digioResp.id || digioResp.request_id;
+      kyc.kycUrl = kycUrl;
+      kyc.kycStatus = "IN_PROGRESS";
+      kyc.kycRaw = digioResp;
+
+      await kyc.save();
     }
 
-    kyc.digioKycRequestId = digioResp.id || digioResp.request_id;
-    kyc.kycUrl = kycUrl;
-    kyc.kycStatus = "IN_PROGRESS";
-    kyc.kycRaw = digioResp;
-    await kyc.save();
-
+    /* 8️⃣ Final response */
     return res.status(200).json({
       success: true,
       customerId: payment.customerId,
       kycId: kyc._id,
-      kycUrl,
+      kycUrl: kyc.kycUrl,
     });
 
   } catch (err) {
@@ -162,6 +183,7 @@ export const paymentSuccessAndStartKyc = async (req, res) => {
     });
   }
 };
+
 
 
 
